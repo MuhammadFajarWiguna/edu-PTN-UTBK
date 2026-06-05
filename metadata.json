@@ -1,0 +1,6 @@
+{
+  "name": "EduPTN UTBK Prep",
+  "description": "Platform persiapan UTBK SNBT komprehensif dengan materi belajar, tryout interaktif, analisis skor, konsultasi AI, komunitas diskusi, gamifikasi, dan pelacakan progres belajar.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

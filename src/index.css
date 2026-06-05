@@ -1,0 +1,325 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer utilities {
+  .subtle-shadow {
+    box-shadow: 0 4px 20px -2px rgba(148, 163, 184, 0.08), 0 2px 8px -1px rgba(148, 163, 184, 0.04);
+  }
+  
+  /* ═══════════════════════════════════════════════════════════
+     PROFESSIONAL SMOOTH HOVER SYSTEM
+     Ultra-smooth, consistent hover effects across all buttons
+     ═══════════════════════════════════════════════════════════ */
+  
+  /* Base smooth transition (use on all interactive elements) */
+  .smooth-hover {
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    will-change: transform;
+  }
+  
+  /* Primary button hover (teal/emerald buttons) */
+  .btn-primary-hover {
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .btn-primary-hover:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 12px 24px -6px rgba(20, 184, 166, 0.35), 
+                0 6px 12px -3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .btn-primary-hover:active {
+    transform: translateY(0) scale(1);
+    transition-duration: 0.1s;
+  }
+  
+  /* Secondary button hover (outline, ghost buttons) */
+  .btn-secondary-hover {
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .btn-secondary-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.1);
+    background-color: rgba(20, 184, 166, 0.05);
+  }
+  
+  .btn-secondary-hover:active {
+    transform: translateY(0);
+  }
+  
+  /* Danger button hover (red, delete buttons) */
+  .btn-danger-hover {
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .btn-danger-hover:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 12px 24px -6px rgba(239, 68, 68, 0.35), 
+                0 6px 12px -3px rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+  
+  .btn-danger-hover:active {
+    transform: translateY(0) scale(1);
+    transition-duration: 0.1s;
+  }
+  
+  /* Card hover effects */
+  .card-hover {
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .card-hover:hover {
+    transform: translateY(-6px) scale(1.01);
+    box-shadow: 0 20px 40px -10px rgba(20, 184, 166, 0.15), 
+                0 10px 20px -5px rgba(0, 0, 0, 0.1);
+  }
+  
+  .card-hover-subtle {
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .card-hover-subtle:hover {
+    transform: translateY(-3px) scale(1.005);
+    box-shadow: 0 12px 24px -8px rgba(20, 184, 166, 0.12), 
+                0 6px 12px -4px rgba(0, 0, 0, 0.08);
+  }
+  
+  /* Icon button hover (small, icon-only buttons) */
+  .icon-btn-hover {
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .icon-btn-hover:hover {
+    transform: scale(1.1) rotate(5deg);
+    box-shadow: 0 6px 12px -3px rgba(20, 184, 166, 0.25);
+  }
+  
+  .icon-btn-hover:active {
+    transform: scale(0.95);
+  }
+  
+  /* Link/text button hover */
+  .link-hover {
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+  }
+  
+  .link-hover::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: currentColor;
+    transition: width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .link-hover:hover::after {
+    width: 100%;
+  }
+  
+  /* Tab button hover */
+  .tab-hover {
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .tab-hover:hover {
+    transform: translateY(-1px);
+    background-color: rgba(20, 184, 166, 0.08);
+  }
+  
+  /* General smooth button (backwards compatible) */
+  .button-hover {
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .button-hover:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 8px 16px -4px rgba(20, 184, 166, 0.3);
+  }
+  
+  .button-hover:active {
+    transform: translateY(0) scale(1);
+  }
+  
+  .glow-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .glow-hover:hover {
+    box-shadow: 0 0 30px rgba(20, 184, 166, 0.4), 0 0 60px rgba(20, 184, 166, 0.2);
+  }
+  
+  .border-glow {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .border-glow:hover {
+    border-color: rgba(20, 184, 166, 0.5);
+    box-shadow: 0 0 20px rgba(20, 184, 166, 0.2), inset 0 0 20px rgba(20, 184, 166, 0.05);
+  }
+  
+  /* Glassmorphism */
+  .glass-effect {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  
+  .glass-effect-dark {
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  
+  /* Gradient Shimmer */
+  .gradient-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .gradient-shimmer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+    transition: left 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .gradient-shimmer:hover::before {
+    left: 100%;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(20, 184, 166, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(20, 184, 166, 0.5);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Smooth dark/light mode transition for all elements */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Preserve button and interactive element transitions */
+button, a, [role="button"], input, textarea, select {
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* But don't apply transition to animations, transforms, opacity (preserves snappiness) */
+.animate-fade-in-up, .animate-slide-in-right,
+[class*="animate-"], [class*="transition-"] {
+  transition-property: background-color, border-color, color;
+}
+
+/* Custom Sleek Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.25);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 184, 166, 0.4);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 184, 166, 0.3);
+}
+
+/* Dark mode body bg */
+.dark body {
+  background-color: #090D16;
+  color: #e4e8f0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
