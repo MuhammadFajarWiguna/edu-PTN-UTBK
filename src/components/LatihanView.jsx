@@ -86,24 +86,36 @@ export default function LatihanView({ user, onAddPoint }) {
   };
 
   const handleMulaiLatihan = async (mapel) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiService.startSession(mapel.id);
-      setSession(data.session);
-      setSoalList(data.soal || []);
-      setSelectedMapel(mapel);
-      setCurrentIndex(0);
-      setJawaban({});
-      setTimeElapsed(0);
-      setActiveTab("latihan");
-    } catch (err) {
-      setError(err.message || "Gagal memulai latihan. Coba lagi.");
-      console.error("Error starting session:", err);
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  setError(null);
+  try {
+    // Dari Fix #3: bersihkan cache supaya dapat soal terbaru
+    apiService.invalidateSoalCache();
+
+    const data = await apiService.startSession(mapel.id);
+    setSession(data.session);
+    setSoalList(data.soal || []);
+    setSelectedMapel(mapel);
+    setCurrentIndex(0);
+    setJawaban({});
+    setTimeElapsed(0);
+
+    // Dari Fix #6: tampilkan peringatan kalau session lokal (offline)
+    if (data._isLocalSession) {
+      setError(
+        "⚠️ Mode offline: soal diambil dari cache lokal. " +
+        "Hasil latihan tidak akan tersimpan ke server."
+      );
     }
-  };
+
+    setActiveTab("latihan");
+  } catch (err) {
+    setError(err.message || "Gagal memulai latihan. Coba lagi.");
+    console.error("Error starting session:", err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   
 const handleSelectJawaban = (soalId, opsiText, opsiIndex) => {
@@ -132,10 +144,12 @@ const handleSubmit = async () => {
   setLoading(true);
   setError(null);
   try {
-    const jawabanArray = Object.entries(jawaban).map(([soalId, jawabanLetter]) => ({
-      soalId,
-      jawaban: jawabanLetter,
-    }));
+    const jawabanArray = Object.entries(jawaban)
+   .filter(([_, val]) => val !== "" && val != null) 
+   .map(([soalId, jawabanValue]) => ({
+    soalId,
+    jawaban: jawabanValue,
+  }));
 
     const result = await apiService.submitSession(session.id, jawabanArray);
     console.log("SUBMIT RESULT:", JSON.stringify(result, null, 2));
@@ -204,6 +218,25 @@ const handleSubmit = async () => {
   };
 
   const currentSoal = soalList[currentIndex];
+  const getOpsiList = (soal) => {
+  if (!soal) return [];
+
+  if (soal.tipe === "TRUE_FALSE") {
+    return ["Benar", "Salah"];
+  }
+
+  if (soal.tipe === "SHORT_ANSWER") {
+    return null; 
+  }
+
+  const normalized = normalizeOpsi(soal.opsi);
+
+  if (normalized.length === 0) {
+    return ["A", "B", "C", "D", "E"]; 
+  }
+
+  return normalized;
+};
   const progress = soalList.length > 0 ? ((currentIndex + 1) / soalList.length) * 100 : 0;
   const answeredCount = Object.keys(jawaban).length;
 
@@ -387,36 +420,85 @@ const handleSubmit = async () => {
               </p>
 
               {/* Answer Options */}
-              <div className="space-y-3">
-                {normalizeOpsi(currentSoal.opsi).map((opsi, idx) => {
-                  const letter = String.fromCharCode(65 + idx);
-                  const isSelected = jawaban[currentSoal.id] === letter;
+              {/* Answer Options — handle semua tipe soal */}
+<div className="space-y-3">
 
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => handleSelectJawaban(currentSoal.id, opsi, idx  )}
-                      className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 transition-all text-left cursor-pointer ${isSelected ?
-                        "border-teal-500 bg-teal-50 dark:bg-teal-950/20 dark:border-teal-500" :
-                        "border-gray-200 hover:border-teal-300 dark:border-zinc-800 dark:hover:border-teal-700"
-                        }`}
-                    >
-                      <span className={`rounded-lg px-3 py-1 text-sm font-bold shrink-0 ${isSelected ?
-                        "bg-teal-600 text-white" :
-                        "bg-gray-100 text-gray-600 dark:bg-zinc-800 dark:text-zinc-400"
-                        }`}>
-                        {letter}
-                      </span>
-                      <span className={`text-sm font-medium ${isSelected ?
-                        "text-teal-900 dark:text-teal-100" :
-                        "text-gray-700 dark:text-zinc-300"
-                        }`}>
-                        {opsi}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+  {/* Label tipe soal kalau bukan SINGLE_CHOICE */}
+  {currentSoal.tipe && currentSoal.tipe !== "SINGLE_CHOICE" && (
+    <div className="flex items-center gap-2 mb-1">
+      <span className={`rounded-lg px-2.5 py-1 text-xs font-bold ${
+        currentSoal.tipe === "TRUE_FALSE"
+          ? "bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400"
+          : "bg-orange-50 text-orange-700 dark:bg-orange-950/20 dark:text-orange-400"
+      }`}>
+        {currentSoal.tipe === "TRUE_FALSE" ? "Benar / Salah" : "Jawaban Singkat"}
+      </span>
+    </div>
+  )}
+
+  {/* SHORT_ANSWER: render input teks */}
+  {currentSoal.tipe === "SHORT_ANSWER" ? (
+    <div className="space-y-2">
+      <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
+        Ketik jawaban kamu:
+      </p>
+      <input
+        type="text"
+        value={
+          // jawaban disimpan sebagai string langsung untuk SHORT_ANSWER
+          jawaban[currentSoal.id] || ""
+        }
+        onChange={(e) => {
+          // Untuk SHORT_ANSWER, simpan teks langsung bukan huruf
+          setJawaban(prev => ({ ...prev, [currentSoal.id]: e.target.value }));
+        }}
+        placeholder="Tulis jawaban di sini..."
+        className="w-full rounded-xl border-2 border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500 dark:text-white transition-all"
+      />
+    </div>
+
+  ) : (
+    /* SINGLE_CHOICE & TRUE_FALSE: render tombol opsi */
+    (getOpsiList(currentSoal) || []).map((opsi, idx) => {
+      const letter = String.fromCharCode(65 + idx);
+      const isSelected = jawaban[currentSoal.id] === letter;
+
+      return (
+        <button
+          key={idx}
+          onClick={() => handleSelectJawaban(currentSoal.id, opsi, idx)}
+          className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 transition-all text-left cursor-pointer ${
+            isSelected
+              ? "border-teal-500 bg-teal-50 dark:bg-teal-950/20 dark:border-teal-500"
+              : "border-gray-200 hover:border-teal-300 dark:border-zinc-800 dark:hover:border-teal-700"
+          }`}
+        >
+          {/* Label huruf / Benar-Salah */}
+          <span className={`rounded-lg px-3 py-1 text-sm font-bold shrink-0 ${
+            isSelected
+              ? "bg-teal-600 text-white"
+              : "bg-gray-100 text-gray-600 dark:bg-zinc-800 dark:text-zinc-400"
+          }`}>
+            {/* TRUE_FALSE tampilkan teks langsung, SINGLE_CHOICE tampilkan huruf */}
+            {currentSoal.tipe === "TRUE_FALSE" ? opsi : letter}
+          </span>
+
+          {/* Teks opsi — untuk TRUE_FALSE tidak perlu tampilkan lagi */}
+          {currentSoal.tipe !== "TRUE_FALSE" && (
+            <span className={`text-sm font-medium ${
+              isSelected
+                ? "text-teal-900 dark:text-teal-100"
+                : "text-gray-700 dark:text-zinc-300"
+            }`}>
+              {opsi}
+            </span>
+          )}
+        </button>
+      );
+    })
+  )}
+
+</div>
             </div>
 
             {/* Navigation Buttons */}
@@ -570,16 +652,25 @@ const handleSubmit = async () => {
     }
   }
 
-  // isCorrect: dari backend jika ada, fallback perbandingan lokal
     const isCorrect = detailItem != null
     ? (detailItem.benar === true || detailItem.isCorrect === true)
     : (userAnswer != null && userAnswer === jawabanBenar);
 
   const getOpsiText = (letter) => {
-    if (!letter || typeof letter !== "string" || letter === "-") return letter || "";
-    const i = letter.toUpperCase().charCodeAt(0) - 65;
-    return (i >= 0 && i < opsiArray.length) ? opsiArray[i] : letter;
-  };
+  if (!letter || letter === "-") return letter || "";
+
+  if (soal.tipe === "TRUE_FALSE") {
+    return letter;
+  }
+
+  if (soal.tipe === "SHORT_ANSWER") {
+    return letter;
+  }
+
+  if (typeof letter !== "string") return "";
+  const i = letter.toUpperCase().charCodeAt(0) - 65;
+  return (i >= 0 && i < opsiArray.length) ? opsiArray[i] : letter;
+};
 
   const userAnswerText = userAnswer ? getOpsiText(userAnswer) : "Tidak dijawab";
   const jawabanBenarText = jawabanBenar !== "-" ? getOpsiText(jawabanBenar) : "-";

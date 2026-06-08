@@ -497,7 +497,7 @@ export default function App() {
             <GraduationCap className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold tracking-tight text-gray-900 dark:text-white font-display">EduPTN Bimbingan</h2>
+            <h2 className="text-sm font-bold tracking-tight text-gray-900 dark:text-white font-display">EduPTN</h2>
             <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-wider font-mono">UTBK-SNBT 2026</p>
           </div>
         </div>

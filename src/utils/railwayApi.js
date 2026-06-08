@@ -107,10 +107,7 @@ export const authApi = {
 // ─── SOAL ────────────────────────────────────────────────────────────────────
 
 export const soalApi = {
-  /**
-   * Ambil daftar soal, bisa difilter by mapel.
-   * GET /soal?mapel=TPS
-   */
+
   list: (mapel) => {
     const qs = mapel ? `?mapel=${encodeURIComponent(mapel)}` : "";
     return apiFetch(`/soal${qs}`);

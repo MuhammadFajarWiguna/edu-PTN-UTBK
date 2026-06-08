@@ -161,7 +161,7 @@ export default function AdminDashboardView({ user, onNavigate }) {
       }));
       setUsers(mappedUsers);
 
-      const sData = await apiService.getQuestions();
+      const sData = await apiService.getQuestions(null, { forceRefresh: true });
       setSoalList(sData);
 
       const mData = await apiService.fetchMaterials();
@@ -249,14 +249,17 @@ export default function AdminDashboardView({ user, onNavigate }) {
       } else {
         // Create new tryout - try Railway first
         const payload = {
-          judul: tryoutForm.judul,
-          kategori: tryoutForm.kategori,
-          durasiMenit: tryoutForm.durasiMenit,
-          totalSoal: tryoutForm.totalSoal,
-          status: tryoutForm.status || "DRAFT",
-          jadwalMulai: tryoutForm.jadwalMulai || null,
-          jadwalSelesai: tryoutForm.jadwalSelesai || null
-        };
+  judul: tryoutForm.judul,
+  kategori: tryoutForm.kategori,
+  durasiMenit: tryoutForm.durasiMenit,
+  // ← tambahkan ini supaya createTryout punya nilai yang benar
+  durasiTPS: tryoutForm.durasiTPS || 90,
+  durasiTKA: tryoutForm.durasiTKA || 90,
+  totalSoal: tryoutForm.totalSoal,
+  status: tryoutForm.status || "DRAFT",
+  jadwalMulai: tryoutForm.jadwalMulai || null,
+  jadwalSelesai: tryoutForm.jadwalSelesai || null
+};
 
         try {
           const created = await apiService.createTryout(payload);
@@ -275,7 +278,12 @@ export default function AdminDashboardView({ user, onNavigate }) {
       }
       setShowTryoutModal(false);
       setEditingTryout(null);
-      setTryoutForm({ judul: "", kategori: "TPS & LITERASI", status: "DRAFT", durasiMenit: 195, totalSoal: 155, jadwalMulai: "", jadwalSelesai: "" });
+     // SESUDAH — sertakan durasiTPS dan durasiTKA default
+      setTryoutForm({ 
+     judul: "", kategori: "TPS & LITERASI", status: "DRAFT",
+     durasiMenit: 180, durasiTPS: 90, durasiTKA: 90,
+     totalSoal: 155, jadwalMulai: "", jadwalSelesai: "" 
+    });
     } catch (err) {
       console.error("Error saving tryout:", err);
       triggerToast("Gagal memproses tryout: " + err.message, "error");
@@ -305,41 +313,78 @@ export default function AdminDashboardView({ user, onNavigate }) {
   };
 
   // 3. Bank Soal
-  const handleSaveSoal = async (e) => {
-    e.preventDefault();
-    try {
-      const payload = {
-        ...soalForm,
-        id: editingSoal ? editingSoal.id : "s-custom-" + Math.random().toString(36).substr(2, 9)
-      };
+ const handleSaveSoal = async (e) => {
+  e.preventDefault();
+  try {
+    // Konversi opsi dari array ke object { A: "...", B: "..." }
+    // karena Railway butuh format object, bukan array
+    const opsiObject = Object.fromEntries(
+      soalForm.opsi
+        .filter(Boolean) // buang opsi yang kosong
+        .map((val, idx) => [String.fromCharCode(65 + idx), val])
+    );
 
-      if (editingSoal) {
-        await apiService.updateQuestion(editingSoal.id, payload);
-        setSoalList(soalList.map(s => s.id === editingSoal.id ? payload : s));
-        triggerToast("Soal berhasil diperbarui");
-      } else {
-        await apiService.createQuestion(payload);
-        setSoalList([payload, ...soalList]);
-        triggerToast("Soal berhasil ditambahkan ke Bank Soal");
-      }
-      setShowSoalModal(false);
-      setEditingSoal(null);
-      setSoalForm({ pertanyaan: "", mapel: "TPS", subtest: "Penalaran Umum", tingkat: "sedang", jawaban: "A", pembahasan: "", opsi: ["", "", "", "", ""] });
-    } catch (err) {
-      triggerToast("Gagal menyimpan soal", "error");
+    const payload = {
+      pertanyaan: soalForm.pertanyaan,
+      mapel: soalForm.mapel,
+      subtest: soalForm.subtest,
+      tingkat: soalForm.tingkat,
+      tipe: soalForm.tipe || "SINGLE_CHOICE",
+      jawaban: soalForm.jawaban,      // sudah string "A"/"B" dari select
+      pembahasan: soalForm.pembahasan || "",
+      opsi: opsiObject,               // sudah dikonversi ke { A: "...", B: "..." }
+    };
+
+    if (editingSoal) {
+      // Update soal
+      await apiService.updateQuestion(editingSoal.id, payload);
+      // Update state lokal dengan data yang sudah diupdate
+      setSoalList(soalList.map(s =>
+        s.id === editingSoal.id
+          ? { ...s, ...payload, opsi: soalForm.opsi } // simpan opsi sebagai array untuk ditampilkan
+          : s
+      ));
+      triggerToast("Soal berhasil diperbarui di Railway");
+    } else {
+      // Create soal baru — kirim ke Railway
+      const res = await apiService.createQuestion(payload);
+
+      // Refresh daftar soal dari Railway supaya ID-nya benar
+      const freshList = await apiService.getQuestions(null, { forceRefresh: true });
+      setSoalList(freshList);
+
+      triggerToast("Soal berhasil ditambahkan ke Bank Soal Railway");
     }
-  };
+
+    // Reset form dan tutup modal
+    setShowSoalModal(false);
+    setEditingSoal(null);
+    setSoalForm({
+      pertanyaan: "", mapel: "TPS", subtest: "Penalaran Umum",
+      tingkat: "sedang", jawaban: "A", pembahasan: "",
+      opsi: ["", "", "", "", ""]
+    });
+  } catch (err) {
+    console.error("Gagal menyimpan soal:", err);
+    triggerToast("Gagal menyimpan soal: " + err.message, "error");
+  }
+};
 
   const handleDeleteSoal = async (soalId) => {
-    if (!confirm("Hapus soal ini dari Bank Soal?")) return;
-    try {
-      await apiService.deleteQuestion(soalId);
-      setSoalList(soalList.filter(s => s.id !== soalId));
-      triggerToast("Soal berhasil dihapus");
-    } catch (e) {
-      triggerToast("Gagal menghapus soal", "error");
-    }
-  };
+  if (!confirm("Hapus soal ini dari Bank Soal?")) return;
+  try {
+    await apiService.deleteQuestion(soalId);
+    // Update state lokal langsung (optimistic update)
+    setSoalList(prev => prev.filter(s => s.id !== soalId));
+    triggerToast("Soal berhasil dihapus dari Railway");
+  } catch (e) {
+    console.error("Gagal menghapus soal:", e);
+    triggerToast("Gagal menghapus soal: " + e.message, "error");
+    // Refresh untuk sinkronisasi kalau ada error
+    const freshList = await apiService.getQuestions(null, { forceRefresh: true });
+    setSoalList(freshList);
+  }
+};
 
   // Import Soal Simulator (Excel/CSV/JSON upload support)
   const handleImportSoal = (e) => {
@@ -1363,7 +1408,22 @@ export default function AdminDashboardView({ user, onNavigate }) {
 
                         <div className="flex gap-1 shrink-0">
                           <button
-                            onClick={() => { setEditingSoal(soal); setSoalForm(soal); setShowSoalModal(true); }}
+                            onClick={() => {
+                  setEditingSoal(soal);
+  
+                  const opsiArray = Array.isArray(soal.opsi)
+                   ? soal.opsi
+                   : Object.values(soal.opsi || {});
+  
+                  const opsiPadded = [...opsiArray, "", "", "", "", ""].slice(0, 5);
+  
+           setSoalForm({
+           ...soal,
+           opsi: opsiPadded,
+           jawaban: soal.jawaban || "A",
+          });
+      setShowSoalModal(true);
+      }}
                             className="rounded-lg p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/20 transition-all cursor-pointer"
                           >
                             <Edit2 className="h-4 w-4" />

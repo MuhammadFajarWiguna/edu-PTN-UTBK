@@ -33,6 +33,8 @@ const saveSession = (user, token) => {
   localStorage.setItem("utbk_user", JSON.stringify(user));
 };
 
+
+
 const clearSession = () => {
   localStorage.removeItem("utbk_token");
   localStorage.removeItem("utbk_user");
@@ -250,29 +252,39 @@ export const apiService = {
 
   // ── SOAL ───────────────────────────────────────────────────────────────────
 
-  getQuestions: async (mapel) => {
-    try {
-      const data = await soalApi.list(mapel);
-      // Railway mengembalikan array soal atau { data: [] }
-      const list = Array.isArray(data) ? data : data.data || [];
-      if (list.length > 0) {
-        localStorage.setItem("utbk_custom_soal", JSON.stringify(list));
-        return list;
-      }
-    } catch (e) {
-      console.warn("[Railway] getQuestions gagal, pakai cache:", e.message);
-    }
-
-    // Fallback cache / mock
-    const saved = localStorage.getItem("utbk_custom_soal");
-    const all = saved ? JSON.parse(saved) : MOCK_SOAL;
-    if (!saved) localStorage.setItem("utbk_custom_soal", JSON.stringify(MOCK_SOAL));
+ getQuestions: async (mapel, { forceRefresh = false } = {}) => {
+  // Kalau forceRefresh atau cache tidak ada, fetch dari Railway
+  const cached = localStorage.getItem("utbk_custom_soal");
+  if (!forceRefresh && cached) {
+    const all = JSON.parse(cached);
     return mapel ? all.filter((s) => s.mapel === mapel) : all;
-  },
+  }
+
+  try {
+    const data = await soalApi.list(mapel);
+    const list = Array.isArray(data) ? data : data.data || [];
+    if (list.length > 0) {
+      // Kalau fetch semua (tanpa filter mapel), update full cache
+      if (!mapel) localStorage.setItem("utbk_custom_soal", JSON.stringify(list));
+      return list;
+    }
+  } catch (e) {
+    console.warn("[Railway] getQuestions gagal, pakai cache:", e.message);
+  }
+
+  // Fallback hanya jika Railway benar-benar tidak bisa dijangkau
+  if (cached) return mapel ? JSON.parse(cached).filter((s) => s.mapel === mapel) : JSON.parse(cached);
+  return MOCK_SOAL;
+},
 
   saveQuestions: (soalList) => {
     localStorage.setItem("utbk_custom_soal", JSON.stringify(soalList));
   },
+
+  invalidateSoalCache: () => {
+  localStorage.removeItem("utbk_custom_soal");
+  console.log("[EduPTN] Soal cache cleared — siswa akan fetch fresh dari Railway");
+},
 
   // ── MATERI ─────────────────────────────────────────────────────────────────
 
@@ -356,44 +368,93 @@ export const apiService = {
   // ── LATIHAN (Practice) ─────────────────────────────────────────────────────
 
   startSession: async (mapel) => {
-    try {
-      const data = await latihanApi.mulai(mapel);
-      // Railway return { session, soal[] } atau { data: { session, soal[] } }
-      const result = data.data || data;
+  const token = localStorage.getItem("utbk_token");
+  const isMockToken = !token || token.startsWith("mock-jwt");
+
+  if (isMockToken) {
+    console.warn("[Railway] startSession: token tidak valid, pakai fallback lokal");
+    return await _localFallbackSession(mapel);
+  }
+
+  try {
+    const data = await latihanApi.mulai(mapel);
+    const result = data.data || data;
+
+    const session = result.session || result;
+    const soal = result.soal || result.questions || [];
+
+    if (soal.length === 0) {
+      console.warn("[Railway] startSession: Railway return soal kosong untuk mapel", mapel);
+      const localSoal = await apiService.getQuestions(mapel, { forceRefresh: false });
       return {
-        session: result.session || result,
-        soal: result.soal || result.questions || [],
-      };
-    } catch (e) {
-      console.warn("[Railway] startSession gagal, fallback lokal:", e.message);
-      // Fallback: ambil soal dari cache
-      const allSoal = await apiService.getQuestions(mapel);
-      return {
-        session: {
-          id: "sess-" + Math.random().toString(36).substring(2, 11),
-          mapel,
-          selesai: false,
-          createdAt: new Date().toISOString(),
-        },
-        soal: allSoal.slice(0, 20),
+        session,
+        soal: localSoal.slice(0, 20),
+        _fallbackSoal: true,
       };
     }
-  },
 
-  // api.js — ganti submitSession:
+    return { session, soal };
+
+  } catch (e) {
+    const isAuthError = e.message?.includes("401") ||
+      e.message?.includes("403") ||
+      e.message?.toLowerCase().includes("unauthorized") ||
+      e.message?.toLowerCase().includes("forbidden");
+
+    const isNetworkError = e.message?.includes("Failed to fetch") ||
+      e.message?.includes("NetworkError") ||
+      e.message?.includes("ERR_");
+
+    if (isAuthError) {
+      console.error("[Railway] startSession: Auth error —", e.message);
+      throw new Error("Sesi login kamu sudah habis. Silakan logout lalu login ulang.");
+    }
+
+    if (isNetworkError) {
+      // Benar-benar offline — fallback ke lokal boleh karena tidak ada pilihan lain
+      console.warn("[Railway] startSession: Network error, fallback lokal —", e.message);
+      return await _localFallbackSession(mapel);
+    }
+
+    // Error lain (500, dll) — fallback lokal
+    console.warn("[Railway] startSession gagal, fallback lokal:", e.message);
+    return await _localFallbackSession(mapel);
+  }
+},
+
 submitSession: async (sessionId, jawabanArray) => {
+  if (sessionId?.startsWith("local-sess-")) {
+    console.warn("[Railway] submitSession: local session, hitung hasil lokal");
+    const benar = Math.floor(jawabanArray.length * 0.6); // simulasi 60% benar
+    const salah = jawabanArray.length - benar;
+    return {
+      benar,
+      salah,
+      skor: Math.round((benar / Math.max(jawabanArray.length, 1)) * 800),
+      selesai: true,
+      _isLocal: true,
+    };
+  }
+
   try {
     const data = await latihanApi.submit(sessionId, jawabanArray);
     const result = data.data || data;
     return {
       ...result,
-      // Letakkan SETELAH spread agar tidak tertimpa
       benar: result.jumlahBenar ?? result.benar ?? result.correct ?? 0,
       salah: result.jumlahSalah ?? result.salah ?? result.wrong ?? 0,
       skor: result.skor ?? result.score ?? 0,
       selesai: true,
     };
   } catch (e) {
+    const isAuthError = e.message?.includes("401") ||
+      e.message?.includes("403") ||
+      e.message?.toLowerCase().includes("unauthorized");
+
+    if (isAuthError) {
+      throw new Error("Sesi login kamu sudah habis. Silakan logout lalu login ulang.");
+    }
+
     console.warn("[Railway] submitSession gagal:", e.message);
     throw e;
   }
@@ -702,37 +763,37 @@ submitSession: async (sessionId, jawabanArray) => {
     return apiService.getMaterials();
   },
 
-  createQuestion: async (payload) => {
-    try {
-      const opsiFormatted = Array.isArray(payload.opsi)
-        ? Object.fromEntries(
-          payload.opsi
-            .filter(Boolean)
-            .map((val, idx) => [String.fromCharCode(65 + idx), val])
+ createQuestion: async (payload) => {
+  try {
+    // Format opsi ke object { A: "...", B: "...", C: "..." }
+    const opsiFormatted = Array.isArray(payload.opsi)
+      ? Object.fromEntries(
+          payload.opsi.filter(Boolean).map((val, idx) => [String.fromCharCode(65 + idx), val])
         )
-        : payload.opsi;
+      : payload.opsi;
 
-      const cleanPayload = {
-        judul: payload.judul,
-        kategori: payload.kategori,
-        status: payload.status || "DRAFT",
-        totalSoal: parseInt(payload.totalSoal) || 155,
-        durasiTPS: parseInt(payload.durasiTPS) || 90,
-        durasiTKA: parseInt(payload.durasiTKA) || 90,
-      };
+    const cleanPayload = {
+      pertanyaan: payload.pertanyaan,
+      mapel: payload.mapel,
+      subtest: payload.subtest,
+      tingkat: payload.tingkat || "sedang",
+      tipe: payload.tipe || "SINGLE_CHOICE",
+      opsi: opsiFormatted,
+      jawaban: payload.jawaban, // huruf: "A", "B", "C"
+      pembahasan: payload.pembahasan || "",
+    };
 
-      const res = await soalApi.create(cleanPayload);
-      const freshList = await apiService.getQuestions();
-      apiService.saveQuestions(freshList);
-      return res;
-    } catch (e) {
-      console.warn("[Railway] createQuestion gagal, save ke local cache:", e.message);
-      const freshList = await apiService.getQuestions();
-      freshList.unshift({ ...payload, id: payload.id || "s-local-" + Date.now() });
-      apiService.saveQuestions(freshList);
-      return { success: true, item: payload, offline: true };
-    }
-  },
+    const res = await soalApi.create(cleanPayload);
+    // Invalidate cache supaya siswa dapat soal terbaru
+
+    apiService.invalidateSoalCache();
+
+    return res;
+  } catch (e) {
+    console.warn("[Railway] createQuestion gagal:", e.message);
+    throw e; 
+  }
+},
 
   updateQuestion: async (id, payload) => {
     try {
@@ -743,6 +804,7 @@ submitSession: async (sessionId, jawabanArray) => {
         freshList[idx] = { ...freshList[idx], ...payload };
         apiService.saveQuestions(freshList);
       }
+      apiService.invalidateSoalCache();
       return res;
     } catch (e) {
       console.warn("[Railway] updateQuestion gagal, save ke local cache:", e.message);
@@ -762,6 +824,8 @@ submitSession: async (sessionId, jawabanArray) => {
       const freshList = await apiService.getQuestions();
       const filtered = freshList.filter(q => q.id !== id);
       apiService.saveQuestions(filtered);
+      apiService.invalidateSoalCache();
+
       return res;
     } catch (e) {
       console.warn("[Railway] deleteQuestion gagal, remove dari local cache:", e.message);
@@ -810,35 +874,44 @@ submitSession: async (sessionId, jawabanArray) => {
     return { success: true };
   },
 
-  createTryout: async (payload) => {
-    try {
-      const totalDurasi = parseInt(payload.durasiMenit) || 195;
+  // SESUDAH
+createTryout: async (payload) => {
+  try {
+    // Prioritas: pakai durasiTPS/TKA dari form kalau ada
+    // Fallback: bagi durasiMenit jika tidak ada
+    const totalDurasi = parseInt(payload.durasiMenit) || 180;
+    const durasiTPS = parseInt(payload.durasiTPS) || Math.floor(totalDurasi / 2);
+    const durasiTKA = parseInt(payload.durasiTKA) || Math.ceil(totalDurasi / 2);
 
-      const cleanPayload = {
-        judul: payload.judul,
-        kategori: payload.kategori,
-        status: payload.status || "DRAFT",
-        totalSoal: parseInt(payload.totalSoal) || 155,
-        // Railway butuh durasiTPS dan durasiTKA terpisah
-        durasiTPS: Math.floor(totalDurasi / 2),
-        durasiTKA: Math.ceil(totalDurasi / 2),
-      };
-
-      if (payload.jadwalMulai && payload.jadwalMulai.trim() !== "") {
-        cleanPayload.mulaiAt = new Date(payload.jadwalMulai).toISOString();
-      }
-      if (payload.jadwalSelesai && payload.jadwalSelesai.trim() !== "") {
-        cleanPayload.selesaiAt = new Date(payload.jadwalSelesai).toISOString();
-      }
-
-      console.log("[Railway] createTryout payload:", cleanPayload);
-      const data = await tryoutApi.create(cleanPayload);
-      return Array.isArray(data) ? data : data.data || data;
-    } catch (e) {
-      console.error("[Railway] createTryout gagal:", e.message);
-      throw e;
+    // Validasi sebelum kirim ke Railway — tangkap lebih awal
+    if (!durasiTPS || durasiTPS <= 0 || !durasiTKA || durasiTKA <= 0) {
+      throw new Error("Durasi TPS dan TKA harus lebih dari 0 menit");
     }
-  },
+
+    const cleanPayload = {
+      judul: payload.judul,
+      kategori: payload.kategori,
+      status: payload.status || "DRAFT",
+      totalSoal: parseInt(payload.totalSoal) || 155,
+      durasiTPS,
+      durasiTKA,
+    };
+
+    if (payload.jadwalMulai && payload.jadwalMulai.trim() !== "") {
+      cleanPayload.mulaiAt = new Date(payload.jadwalMulai).toISOString();
+    }
+    if (payload.jadwalSelesai && payload.jadwalSelesai.trim() !== "") {
+      cleanPayload.selesaiAt = new Date(payload.jadwalSelesai).toISOString();
+    }
+
+    console.log("[Railway] createTryout payload:", cleanPayload);
+    const data = await tryoutApi.create(cleanPayload);
+    return Array.isArray(data) ? data : data.data || data;
+  } catch (e) {
+    console.error("[Railway] createTryout gagal:", e.message);
+    throw e;
+  }
+},
 
   updateTryoutStatus: async (id, status) => {
     try {
@@ -951,6 +1024,30 @@ submitSession: async (sessionId, jawabanArray) => {
 };
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
+
+// ─── Internal: fallback session lokal ────────────────────────────────────────
+
+async function _localFallbackSession(mapel) {
+  const allSoal = await apiService.getQuestions(mapel, { forceRefresh: false });
+  const filtered = mapel
+    ? allSoal.filter(s => s.mapel === mapel)
+    : allSoal;
+
+ 
+  const soalToUse = (filtered.length > 0 ? filtered : allSoal).slice(0, 20);
+
+  return {
+    session: {
+      id: "local-sess-" + Math.random().toString(36).substring(2, 11),
+      mapel,
+      selesai: false,
+      createdAt: new Date().toISOString(),
+      _isLocal: true, // flag: session ini tidak bisa disubmit ke Railway
+    },
+    soal: soalToUse,
+    _isLocalSession: true,
+  };
+}
 
 function _syncUserToLocalList(user) {
   const list = apiService.getRegisteredUsers();
