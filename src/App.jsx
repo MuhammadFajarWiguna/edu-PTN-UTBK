@@ -77,14 +77,22 @@ export default function App() {
       delay: 0,
     });
 
-    // Check for Google OAuth callback
+    // Check for hash-based OAuth callback (Supabase)
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+      // This is an OAuth callback, handle it
+      handleSupabaseOAuthCallback();
+      return; // Don't check old URL params
+    }
+
+    // Check for Google OAuth callback (legacy server.js method)
     const urlParams = new URLSearchParams(window.location.search);
     const googleAuth = urlParams.get('google_auth');
     const linkedinAuth = urlParams.get('linkedin_auth');
     const userData = urlParams.get('user');
     const token = urlParams.get('token');
 
-    // Handle Google OAuth
+    // Handle Google OAuth (legacy)
     if (googleAuth === 'success' && userData && token) {
       try {
         const user = JSON.parse(decodeURIComponent(userData));
@@ -116,7 +124,7 @@ export default function App() {
       window.history.replaceState({}, document.title, "/");
     }
 
-    // Handle LinkedIn OAuth
+    // Handle LinkedIn OAuth (legacy)
     if (linkedinAuth === 'success' && userData && token) {
       try {
         const user = JSON.parse(decodeURIComponent(userData));
@@ -212,6 +220,60 @@ export default function App() {
       window.removeEventListener('focus', handleFocus);
     };
   }, []);
+
+  // Handle Supabase OAuth callback
+  const handleSupabaseOAuthCallback = async () => {
+    try {
+      // Import dynamically to avoid issues
+      const { createClient } = await import("@supabase/supabase-js");
+      const supabase = createClient(
+        import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+      );
+
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (error) throw error;
+
+      if (session) {
+        const supaUser = session.user;
+        
+        // Construct user object
+        const userData = {
+          id: supaUser.id,
+          email: supaUser.email,
+          name: supaUser.user_metadata.full_name || supaUser.user_metadata.name || supaUser.email.split('@')[0],
+          firstName: supaUser.user_metadata.given_name || '',
+          lastName: supaUser.user_metadata.family_name || '',
+          avatar: supaUser.user_metadata.avatar_url || supaUser.user_metadata.picture,
+          role: 'SISWA',
+          provider: supaUser.app_metadata.provider || 'google',
+        };
+
+        // Save to localStorage
+        localStorage.setItem('utbk_user', JSON.stringify(userData));
+        localStorage.setItem('utbk_token', session.access_token);
+
+        // Set user state
+        setUser(userData);
+        setShowLanding(false);
+
+        console.log('🔐 Supabase OAuth Success!');
+        console.log('   User:', userData.name);
+        console.log('   Provider:', userData.provider);
+
+        // Show success toast
+        showToast(`🎉 Selamat datang, ${userData.name}!`, "success");
+
+        // Clean URL hash
+        window.history.replaceState({}, document.title, "/");
+      }
+    } catch (error) {
+      console.error('Supabase OAuth callback error:', error);
+      showToast("❌ Login gagal: " + error.message, "error");
+      window.history.replaceState({}, document.title, "/");
+    }
+  };
 
   const toggleDarkMode = () => {
     const target = !darkMode;

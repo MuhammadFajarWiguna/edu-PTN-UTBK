@@ -5,11 +5,19 @@ import {
   BookOpen, TrendingUp, Sparkles
 } from "lucide-react";
 import { apiService } from "../utils/api";
+import { createClient } from "@supabase/supabase-js";
+
+// Initialize Supabase client
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL || "",
+  import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ""
+);
 
 /**
  * AuthPage — Halaman login & register profesional.
  * Terhubung ke Railway API (/auth/login & /auth/register).
  * Fallback otomatis ke mode lokal jika Railway tidak tersedia.
+ * Google OAuth menggunakan Supabase Auth untuk kompatibilitas Vercel.
  */
 export default function AuthPage({ onAuthSuccess, darkMode, onToggleDarkMode }) {
   const [mode, setMode] = useState("login"); // "login" | "register"
@@ -99,6 +107,36 @@ export default function AuthPage({ onAuthSuccess, darkMode, onToggleDarkMode }) 
         setError(msg || "Terjadi kesalahan. Coba lagi.");
       }
     } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Google OAuth dengan Supabase ──────────────────────────────────────────
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          }
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // OAuth flow will redirect to Google, then back to callback
+      // No need to do anything here, user will be redirected
+    } catch (err) {
+      console.error('Google OAuth error:', err);
+      setError('Login dengan Google gagal: ' + (err.message || 'Coba lagi'));
       setLoading(false);
     }
   };
@@ -352,8 +390,9 @@ export default function AuthPage({ onAuthSuccess, darkMode, onToggleDarkMode }) 
             {/* Google Button */}
             <button
               type="button"
-              onClick={() => (window.location.href = "/auth/google")}
-              className="btn-secondary-hover group relative w-full flex items-center justify-center gap-3 rounded-xl bg-white border border-gray-200/80 px-5 py-3.5 text-sm font-semibold text-gray-700 shadow-sm dark:bg-zinc-900/60 dark:border-zinc-700/80 dark:text-zinc-200 overflow-hidden cursor-pointer"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="btn-secondary-hover group relative w-full flex items-center justify-center gap-3 rounded-xl bg-white border border-gray-200/80 px-5 py-3.5 text-sm font-semibold text-gray-700 shadow-sm dark:bg-zinc-900/60 dark:border-zinc-700/80 dark:text-zinc-200 overflow-hidden cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {/* Subtle gradient overlay on hover */}
               <div className="absolute inset-0 bg-gradient-to-r from-blue-50/0 via-blue-50/50 to-red-50/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 dark:from-blue-500/0 dark:via-blue-500/5 dark:to-red-500/0" />
@@ -367,12 +406,16 @@ export default function AuthPage({ onAuthSuccess, darkMode, onToggleDarkMode }) 
               </svg>
               
               {/* Text */}
-              <span className="relative">Lanjutkan dengan Google</span>
+              <span className="relative">
+                {loading ? "Mengarahkan ke Google..." : "Lanjutkan dengan Google"}
+              </span>
               
               {/* Arrow indicator */}
-              <svg className="relative h-4 w-4 ml-auto opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              {!loading && (
+                <svg className="relative h-4 w-4 ml-auto opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              )}
             </button>
           </div>
 
