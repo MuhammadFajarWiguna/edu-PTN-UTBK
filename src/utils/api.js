@@ -538,44 +538,129 @@ submitSession: async (sessionId, jawabanArray) => {
   // ── AI KONSULTASI ──────────────────────────────────────────────────────────
 
   /**
-   * Kirim pesan ke AI Konsultan via local server proxy (Gemini).
-   * Endpoint ini tetap di local server.js karena butuh GEMINI_API_KEY server-side.
+   * Kirim pesan ke Gemini API langsung dari browser (client-side).
+   * Tidak lagi bergantung pada server proxy — memanggil Gemini REST API secara langsung.
+   * Prioritas key: custom key dari localStorage → VITE_GEMINI_API_KEY dari env.
    */
   askGeminiChat: async (message, history) => {
-    let response;
-    const customKey = localStorage.getItem("utbk_custom_gemini_key") || "";
-    
-    try {
-      response = await fetch("/api/v1/consultation", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "X-Gemini-API-Key": customKey
-        },
-        body: JSON.stringify({ message, history }),
-      });
-    } catch (networkErr) {
-      // Benar-benar tidak bisa terhubung ke server lokal
-      console.error("AI Consultation network error:", networkErr);
+    // Ambil API key: prioritas custom key dari user, lalu key dari env
+    const apiKey =
+      localStorage.getItem("utbk_custom_gemini_key")?.trim() ||
+      import.meta.env.VITE_GEMINI_API_KEY ||
+      "";
+
+    if (!apiKey) {
       throw new Error(
-        "Tidak dapat terhubung ke server AI lokal. Pastikan server berjalan (npm run dev)."
+        "API Key Gemini tidak ditemukan. Silakan atur Custom API Key di panel Konsultan AI, atau tambahkan VITE_GEMINI_API_KEY di file .env."
       );
     }
 
-    if (response.ok) {
-      const data = await response.json();
-      return data.text;
+    // System prompt khusus untuk konteks UTBK/SNBT
+    const systemInstruction = {
+      parts: [{
+        text: `Anda adalah AI Mentor EduPTN, asisten belajar cerdas yang membantu siswa Indonesia mempersiapkan diri untuk UTBK SNBT 2026. 
+Tugas Anda:
+- Jelaskan konsep TPS (Penalaran Umum, Pengetahuan Kuantitatif, Literasi Bahasa), TKA (Matematika, Fisika, Kimia, Biologi, Sejarah, Sosiologi, Ekonomi, Geografi), dan pola soal SNBT.
+- Bantu analisis soal-soal yang dikirim siswa, berikan pembahasan langkah demi langkah.
+- Berikan rekomendasi strategi belajar, jadwal, dan tips menghadapi ujian.
+- Informasikan tentang PTN, passing grade, dan peluang masuk.
+- Selalu gunakan bahasa Indonesia yang ramah, jelas, dan memotivasi.
+- Gunakan format Markdown (### untuk heading, - untuk bullet, **teks** untuk bold) agar jawaban rapi.
+Jawab dalam bahasa Indonesia kecuali jika pertanyaan dalam bahasa Inggris.`
+      }]
+    };
+
+    // Bangun riwayat percakapan dalam format Gemini
+    const geminiContents = history.map((msg) => ({
+      role: msg.role === "model" ? "model" : "user",
+      parts: [{ text: msg.text || msg.parts?.[0]?.text || "" }],
+    }));
+
+    // Tambahkan pesan terbaru dari user
+    geminiContents.push({
+      role: "user",
+      parts: [{ text: message }],
+    });
+
+    const requestBody = {
+      system_instruction: systemInstruction,
+      contents: geminiContents,
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      },
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+      ],
+    };
+
+    // Daftar model fallback — dicoba berurutan jika model sebelumnya gagal/overload
+    const MODEL_FALLBACKS = [
+      { version: "v1beta", model: "gemini-2.0-flash" },
+      { version: "v1beta", model: "gemini-2.0-flash-lite" },
+      { version: "v1",     model: "gemini-1.5-flash" },
+      { version: "v1",     model: "gemini-1.5-flash-8b" },
+    ];
+
+    let lastError = null;
+
+    for (const { version, model } of MODEL_FALLBACKS) {
+      const endpoint = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${apiKey}`;
+
+      let response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+      } catch (networkErr) {
+        console.error(`[Gemini] Network error saat mencoba ${model}:`, networkErr);
+        lastError = new Error("Tidak dapat terhubung ke Gemini API. Periksa koneksi internet Anda.");
+        continue; // coba model berikutnya
+      }
+
+      // Sukses — ambil teks respons
+      if (response.ok) {
+        const data = await response.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          console.log(`[Gemini] Sukses menggunakan model: ${model}`);
+          return text;
+        }
+        // Respons kosong — coba model berikutnya
+        lastError = new Error("Gemini tidak mengembalikan respons yang valid.");
+        continue;
+      }
+
+      // Parse error dari response
+      let errMsg = `${model}: HTTP ${response.status}`;
+      try {
+        const errData = await response.json();
+        errMsg = errData?.error?.message || errMsg;
+      } catch (_) { /* ignore */ }
+
+      console.warn(`[Gemini] Model ${model} gagal (${response.status}):`, errMsg);
+      lastError = new Error(errMsg);
+
+      // Jika bukan error overload/unavailable, hentikan (misal: API key salah)
+      const isRetryable = response.status === 503 || response.status === 429 || response.status === 404;
+      if (!isRetryable) {
+        // Error fatal (401 key salah, 400 bad request) — jangan coba model lain
+        throw lastError;
+      }
+
+      // 503 / 429 / 404 → lanjut ke model berikutnya
     }
 
-    // Server merespon tapi dengan error — lempar error agar UI bisa tampilkan pesan yang tepat
-    let errMsg = `Server error ${response.status}`;
-    try {
-      const errData = await response.json();
-      errMsg = errData.error || errMsg;
-    } catch (_) { /* ignore json parse error */ }
-
-    console.error("AI Consultation error:", errMsg);
-    throw new Error(errMsg);
+    // Semua model gagal
+    console.error("[Gemini] Semua model fallback gagal. Error terakhir:", lastError?.message);
+    throw new Error(
+      "Semua model AI sedang tidak tersedia saat ini. Silakan coba lagi dalam beberapa menit, atau gunakan Custom API Key Anda sendiri."
+    );
   },
 
   // ── USER LIST (Admin) ──────────────────────────────────────────────────────
