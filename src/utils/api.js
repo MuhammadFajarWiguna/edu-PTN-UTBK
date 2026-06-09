@@ -252,39 +252,39 @@ export const apiService = {
 
   // ── SOAL ───────────────────────────────────────────────────────────────────
 
- getQuestions: async (mapel, { forceRefresh = false } = {}) => {
-  // Kalau forceRefresh atau cache tidak ada, fetch dari Railway
-  const cached = localStorage.getItem("utbk_custom_soal");
-  if (!forceRefresh && cached) {
-    const all = JSON.parse(cached);
-    return mapel ? all.filter((s) => s.mapel === mapel) : all;
-  }
-
-  try {
-    const data = await soalApi.list(mapel);
-    const list = Array.isArray(data) ? data : data.data || [];
-    if (list.length > 0) {
-      // Kalau fetch semua (tanpa filter mapel), update full cache
-      if (!mapel) localStorage.setItem("utbk_custom_soal", JSON.stringify(list));
-      return list;
+  getQuestions: async (mapel, { forceRefresh = false } = {}) => {
+    // Kalau forceRefresh atau cache tidak ada, fetch dari Railway
+    const cached = localStorage.getItem("utbk_custom_soal");
+    if (!forceRefresh && cached) {
+      const all = JSON.parse(cached);
+      return mapel ? all.filter((s) => s.mapel === mapel) : all;
     }
-  } catch (e) {
-    console.warn("[Railway] getQuestions gagal, pakai cache:", e.message);
-  }
 
-  // Fallback hanya jika Railway benar-benar tidak bisa dijangkau
-  if (cached) return mapel ? JSON.parse(cached).filter((s) => s.mapel === mapel) : JSON.parse(cached);
-  return MOCK_SOAL;
-},
+    try {
+      const data = await soalApi.list(mapel);
+      const list = Array.isArray(data) ? data : data.data || [];
+      if (list.length > 0) {
+        // Kalau fetch semua (tanpa filter mapel), update full cache
+        if (!mapel) localStorage.setItem("utbk_custom_soal", JSON.stringify(list));
+        return list;
+      }
+    } catch (e) {
+      console.warn("[Railway] getQuestions gagal, pakai cache:", e.message);
+    }
+
+    // Fallback hanya jika Railway benar-benar tidak bisa dijangkau
+    if (cached) return mapel ? JSON.parse(cached).filter((s) => s.mapel === mapel) : JSON.parse(cached);
+    return MOCK_SOAL;
+  },
 
   saveQuestions: (soalList) => {
     localStorage.setItem("utbk_custom_soal", JSON.stringify(soalList));
   },
 
   invalidateSoalCache: () => {
-  localStorage.removeItem("utbk_custom_soal");
-  console.log("[EduPTN] Soal cache cleared — siswa akan fetch fresh dari Railway");
-},
+    localStorage.removeItem("utbk_custom_soal");
+    console.log("[EduPTN] Soal cache cleared — siswa akan fetch fresh dari Railway");
+  },
 
   // ── MATERI ─────────────────────────────────────────────────────────────────
 
@@ -368,97 +368,97 @@ export const apiService = {
   // ── LATIHAN (Practice) ─────────────────────────────────────────────────────
 
   startSession: async (mapel) => {
-  const token = localStorage.getItem("utbk_token");
-  const isMockToken = !token || token.startsWith("mock-jwt");
+    const token = localStorage.getItem("utbk_token");
+    const isMockToken = !token || token.startsWith("mock-jwt");
 
-  if (isMockToken) {
-    console.warn("[Railway] startSession: token tidak valid, pakai fallback lokal");
-    return await _localFallbackSession(mapel);
-  }
-
-  try {
-    const data = await latihanApi.mulai(mapel);
-    const result = data.data || data;
-
-    const session = result.session || result;
-    const soal = result.soal || result.questions || [];
-
-    if (soal.length === 0) {
-      console.warn("[Railway] startSession: Railway return soal kosong untuk mapel", mapel);
-      const localSoal = await apiService.getQuestions(mapel, { forceRefresh: false });
-      return {
-        session,
-        soal: localSoal.slice(0, 20),
-        _fallbackSoal: true,
-      };
-    }
-
-    return { session, soal };
-
-  } catch (e) {
-    const isAuthError = e.message?.includes("401") ||
-      e.message?.includes("403") ||
-      e.message?.toLowerCase().includes("unauthorized") ||
-      e.message?.toLowerCase().includes("forbidden");
-
-    const isNetworkError = e.message?.includes("Failed to fetch") ||
-      e.message?.includes("NetworkError") ||
-      e.message?.includes("ERR_");
-
-    if (isAuthError) {
-      console.error("[Railway] startSession: Auth error —", e.message);
-      throw new Error("Sesi login kamu sudah habis. Silakan logout lalu login ulang.");
-    }
-
-    if (isNetworkError) {
-      // Benar-benar offline — fallback ke lokal boleh karena tidak ada pilihan lain
-      console.warn("[Railway] startSession: Network error, fallback lokal —", e.message);
+    if (isMockToken) {
+      console.warn("[Railway] startSession: token tidak valid, pakai fallback lokal");
       return await _localFallbackSession(mapel);
     }
 
-    // Error lain (500, dll) — fallback lokal
-    console.warn("[Railway] startSession gagal, fallback lokal:", e.message);
-    return await _localFallbackSession(mapel);
-  }
-},
+    try {
+      const data = await latihanApi.mulai(mapel);
+      const result = data.data || data;
 
-submitSession: async (sessionId, jawabanArray) => {
-  if (sessionId?.startsWith("local-sess-")) {
-    console.warn("[Railway] submitSession: local session, hitung hasil lokal");
-    const benar = Math.floor(jawabanArray.length * 0.6); // simulasi 60% benar
-    const salah = jawabanArray.length - benar;
-    return {
-      benar,
-      salah,
-      skor: Math.round((benar / Math.max(jawabanArray.length, 1)) * 800),
-      selesai: true,
-      _isLocal: true,
-    };
-  }
+      const session = result.session || result;
+      const soal = result.soal || result.questions || [];
 
-  try {
-    const data = await latihanApi.submit(sessionId, jawabanArray);
-    const result = data.data || data;
-    return {
-      ...result,
-      benar: result.jumlahBenar ?? result.benar ?? result.correct ?? 0,
-      salah: result.jumlahSalah ?? result.salah ?? result.wrong ?? 0,
-      skor: result.skor ?? result.score ?? 0,
-      selesai: true,
-    };
-  } catch (e) {
-    const isAuthError = e.message?.includes("401") ||
-      e.message?.includes("403") ||
-      e.message?.toLowerCase().includes("unauthorized");
+      if (soal.length === 0) {
+        console.warn("[Railway] startSession: Railway return soal kosong untuk mapel", mapel);
+        const localSoal = await apiService.getQuestions(mapel, { forceRefresh: false });
+        return {
+          session,
+          soal: localSoal.slice(0, 20),
+          _fallbackSoal: true,
+        };
+      }
 
-    if (isAuthError) {
-      throw new Error("Sesi login kamu sudah habis. Silakan logout lalu login ulang.");
+      return { session, soal };
+
+    } catch (e) {
+      const isAuthError = e.message?.includes("401") ||
+        e.message?.includes("403") ||
+        e.message?.toLowerCase().includes("unauthorized") ||
+        e.message?.toLowerCase().includes("forbidden");
+
+      const isNetworkError = e.message?.includes("Failed to fetch") ||
+        e.message?.includes("NetworkError") ||
+        e.message?.includes("ERR_");
+
+      if (isAuthError) {
+        console.error("[Railway] startSession: Auth error —", e.message);
+        throw new Error("Sesi login kamu sudah habis. Silakan logout lalu login ulang.");
+      }
+
+      if (isNetworkError) {
+        // Benar-benar offline — fallback ke lokal boleh karena tidak ada pilihan lain
+        console.warn("[Railway] startSession: Network error, fallback lokal —", e.message);
+        return await _localFallbackSession(mapel);
+      }
+
+      // Error lain (500, dll) — fallback lokal
+      console.warn("[Railway] startSession gagal, fallback lokal:", e.message);
+      return await _localFallbackSession(mapel);
+    }
+  },
+
+  submitSession: async (sessionId, jawabanArray) => {
+    if (sessionId?.startsWith("local-sess-")) {
+      console.warn("[Railway] submitSession: local session, hitung hasil lokal");
+      const benar = Math.floor(jawabanArray.length * 0.6); // simulasi 60% benar
+      const salah = jawabanArray.length - benar;
+      return {
+        benar,
+        salah,
+        skor: Math.round((benar / Math.max(jawabanArray.length, 1)) * 800),
+        selesai: true,
+        _isLocal: true,
+      };
     }
 
-    console.warn("[Railway] submitSession gagal:", e.message);
-    throw e;
-  }
-},
+    try {
+      const data = await latihanApi.submit(sessionId, jawabanArray);
+      const result = data.data || data;
+      return {
+        ...result,
+        benar: result.jumlahBenar ?? result.benar ?? result.correct ?? 0,
+        salah: result.jumlahSalah ?? result.salah ?? result.wrong ?? 0,
+        skor: result.skor ?? result.score ?? 0,
+        selesai: true,
+      };
+    } catch (e) {
+      const isAuthError = e.message?.includes("401") ||
+        e.message?.includes("403") ||
+        e.message?.toLowerCase().includes("unauthorized");
+
+      if (isAuthError) {
+        throw new Error("Sesi login kamu sudah habis. Silakan logout lalu login ulang.");
+      }
+
+      console.warn("[Railway] submitSession gagal:", e.message);
+      throw e;
+    }
+  },
 
   getLatihanRiwayat: async () => {
     try {
@@ -542,20 +542,17 @@ submitSession: async (sessionId, jawabanArray) => {
    * Tidak lagi bergantung pada server proxy — memanggil Gemini REST API secara langsung.
    * Prioritas key: custom key dari localStorage → VITE_GEMINI_API_KEY dari env.
    */
+
   askGeminiChat: async (message, history) => {
-    // Ambil API key: prioritas custom key dari user, lalu key dari env
     const apiKey =
       localStorage.getItem("utbk_custom_gemini_key")?.trim() ||
       import.meta.env.VITE_GEMINI_API_KEY ||
       "";
 
     if (!apiKey) {
-      throw new Error(
-        "API Key Gemini tidak ditemukan. Silakan atur Custom API Key di panel Konsultan AI, atau tambahkan VITE_GEMINI_API_KEY di file .env."
-      );
+      throw new Error("API Key Gemini tidak ditemukan.");
     }
 
-    // System prompt khusus untuk konteks UTBK/SNBT
     const systemInstruction = {
       parts: [{
         text: `Anda adalah AI Mentor EduPTN, asisten belajar cerdas yang membantu siswa Indonesia mempersiapkan diri untuk UTBK SNBT 2026. 
@@ -570,99 +567,74 @@ Jawab dalam bahasa Indonesia kecuali jika pertanyaan dalam bahasa Inggris.`
       }]
     };
 
-    // Bangun riwayat percakapan dalam format Gemini
     const geminiContents = history.map((msg) => ({
       role: msg.role === "model" ? "model" : "user",
-      parts: [{ text: msg.text || msg.parts?.[0]?.text || "" }],
+      parts: [{ text: msg.text || "" }],
     }));
 
-    // Tambahkan pesan terbaru dari user
     geminiContents.push({
       role: "user",
       parts: [{ text: message }],
     });
 
-    // Semua model menggunakan v1beta — endpoint yang mendukung system_instruction
-    // dan memiliki ketersediaan model paling lengkap
+    // Model fallback menggunakan model-model 2026 yang aktif
     const MODEL_FALLBACKS = [
-      "gemini-2.5-flash",        // terbaru, prioritas utama
-      "gemini-2.0-flash",        // stabil, fallback 1
-      "gemini-2.0-flash-lite",   // ringan, fallback 2
-      "gemini-1.5-flash-latest", // fallback 3
-      "gemini-1.5-flash-8b",     // paling ringan, last resort
+      "gemini-3.5-flash",          // Utama, stabil, tercepat
+      "gemini-3.1-flash-lite",     // Efisien, low latency
+      "gemini-2.5-flash",          // Fallback generasi 2.5
+      "gemini-2.0-flash",          // Fallback generasi 2.0
+      "gemini-flash-latest"        // Fallback dinamis
     ];
 
     const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-
-    // Request body sama untuk semua model (v1beta semua)
-    const requestBody = {
-      system_instruction: systemInstruction,
-      contents: geminiContents,
-      generationConfig: {
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 2048,
-      },
-      safetySettings: [
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-      ],
-    };
-
     let lastError = null;
 
     for (const model of MODEL_FALLBACKS) {
       const endpoint = `${BASE_URL}/${model}:generateContent?key=${apiKey}`;
 
-      let response;
       try {
-        response = await fetch(endpoint, {
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
+          body: JSON.stringify({
+            system_instruction: systemInstruction,
+            contents: geminiContents,
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 2048,
+            },
+          }),
         });
-      } catch (networkErr) {
-        console.error(`[Gemini] Network error saat mencoba ${model}:`, networkErr);
-        lastError = new Error("Tidak dapat terhubung ke Gemini API. Periksa koneksi internet Anda.");
-        continue;
-      }
 
-      // Sukses — ambil teks respons
-      if (response.ok) {
         const data = await response.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          console.log(`[Gemini] Sukses menggunakan model: ${model}`);
-          return text;
+
+        if (response.ok) {
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) return text;
         }
-        lastError = new Error("Gemini tidak mengembalikan respons yang valid.");
-        continue;
-      }
 
-      // Parse error dari response
-      let errMsg = `${model}: HTTP ${response.status}`;
-      try {
-        const errData = await response.json();
-        errMsg = errData?.error?.message || errMsg;
-      } catch (_) { /* ignore */ }
+        // Jika error 503 (Overload), lanjut ke model berikutnya
+        if (response.status === 503) {
+          console.warn(`[Gemini] Model ${model} sibuk (503), mencoba model lain...`);
+          lastError = new Error("Server Google sedang sibuk (High Demand).");
+          continue;
+        }
 
-      console.warn(`[Gemini] Model ${model} gagal (${response.status}):`, errMsg);
-      lastError = new Error(errMsg);
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("API Key tidak valid atau limit harian habis.");
+        }
 
-      // Error retryable: overload (503), rate limit (429), model tidak ditemukan (404)
-      // Error fatal: API key salah (401) — stop langsung
-      const isRetryable = response.status === 503 || response.status === 429 || response.status === 404;
-      if (!isRetryable) {
-        throw lastError;
+        lastError = new Error(data?.error?.message || "Gagal mengambil respon");
+
+      } catch (err) {
+        console.error(`[Gemini] Error pada model ${model}:`, err.message);
+        lastError = err;
+        // Jika koneksi internet putus, langsung stop
+        if (err.message.includes("Failed to fetch")) break;
       }
     }
 
-    // Semua model gagal
-    console.error("[Gemini] Semua model fallback gagal. Error terakhir:", lastError?.message);
-    throw new Error(
-      "Semua model AI sedang tidak tersedia saat ini. Silakan coba lagi dalam beberapa menit, atau gunakan Custom API Key Anda sendiri."
-    );
+    throw new Error(lastError?.message || "Semua model gagal merespon.");
   },
 
   // ── USER LIST (Admin) ──────────────────────────────────────────────────────
@@ -850,37 +822,37 @@ Jawab dalam bahasa Indonesia kecuali jika pertanyaan dalam bahasa Inggris.`
     return apiService.getMaterials();
   },
 
- createQuestion: async (payload) => {
-  try {
-    // Format opsi ke object { A: "...", B: "...", C: "..." }
-    const opsiFormatted = Array.isArray(payload.opsi)
-      ? Object.fromEntries(
+  createQuestion: async (payload) => {
+    try {
+      // Format opsi ke object { A: "...", B: "...", C: "..." }
+      const opsiFormatted = Array.isArray(payload.opsi)
+        ? Object.fromEntries(
           payload.opsi.filter(Boolean).map((val, idx) => [String.fromCharCode(65 + idx), val])
         )
-      : payload.opsi;
+        : payload.opsi;
 
-    const cleanPayload = {
-      pertanyaan: payload.pertanyaan,
-      mapel: payload.mapel,
-      subtest: payload.subtest,
-      tingkat: payload.tingkat || "sedang",
-      tipe: payload.tipe || "SINGLE_CHOICE",
-      opsi: opsiFormatted,
-      jawaban: payload.jawaban, // huruf: "A", "B", "C"
-      pembahasan: payload.pembahasan || "",
-    };
+      const cleanPayload = {
+        pertanyaan: payload.pertanyaan,
+        mapel: payload.mapel,
+        subtest: payload.subtest,
+        tingkat: payload.tingkat || "sedang",
+        tipe: payload.tipe || "SINGLE_CHOICE",
+        opsi: opsiFormatted,
+        jawaban: payload.jawaban, // huruf: "A", "B", "C"
+        pembahasan: payload.pembahasan || "",
+      };
 
-    const res = await soalApi.create(cleanPayload);
-    // Invalidate cache supaya siswa dapat soal terbaru
+      const res = await soalApi.create(cleanPayload);
+      // Invalidate cache supaya siswa dapat soal terbaru
 
-    apiService.invalidateSoalCache();
+      apiService.invalidateSoalCache();
 
-    return res;
-  } catch (e) {
-    console.warn("[Railway] createQuestion gagal:", e.message);
-    throw e; 
-  }
-},
+      return res;
+    } catch (e) {
+      console.warn("[Railway] createQuestion gagal:", e.message);
+      throw e;
+    }
+  },
 
   updateQuestion: async (id, payload) => {
     try {
@@ -962,43 +934,43 @@ Jawab dalam bahasa Indonesia kecuali jika pertanyaan dalam bahasa Inggris.`
   },
 
   // SESUDAH
-createTryout: async (payload) => {
-  try {
-    // Prioritas: pakai durasiTPS/TKA dari form kalau ada
-    // Fallback: bagi durasiMenit jika tidak ada
-    const totalDurasi = parseInt(payload.durasiMenit) || 180;
-    const durasiTPS = parseInt(payload.durasiTPS) || Math.floor(totalDurasi / 2);
-    const durasiTKA = parseInt(payload.durasiTKA) || Math.ceil(totalDurasi / 2);
+  createTryout: async (payload) => {
+    try {
+      // Prioritas: pakai durasiTPS/TKA dari form kalau ada
+      // Fallback: bagi durasiMenit jika tidak ada
+      const totalDurasi = parseInt(payload.durasiMenit) || 180;
+      const durasiTPS = parseInt(payload.durasiTPS) || Math.floor(totalDurasi / 2);
+      const durasiTKA = parseInt(payload.durasiTKA) || Math.ceil(totalDurasi / 2);
 
-    // Validasi sebelum kirim ke Railway — tangkap lebih awal
-    if (!durasiTPS || durasiTPS <= 0 || !durasiTKA || durasiTKA <= 0) {
-      throw new Error("Durasi TPS dan TKA harus lebih dari 0 menit");
+      // Validasi sebelum kirim ke Railway — tangkap lebih awal
+      if (!durasiTPS || durasiTPS <= 0 || !durasiTKA || durasiTKA <= 0) {
+        throw new Error("Durasi TPS dan TKA harus lebih dari 0 menit");
+      }
+
+      const cleanPayload = {
+        judul: payload.judul,
+        kategori: payload.kategori,
+        status: payload.status || "DRAFT",
+        totalSoal: parseInt(payload.totalSoal) || 155,
+        durasiTPS,
+        durasiTKA,
+      };
+
+      if (payload.jadwalMulai && payload.jadwalMulai.trim() !== "") {
+        cleanPayload.mulaiAt = new Date(payload.jadwalMulai).toISOString();
+      }
+      if (payload.jadwalSelesai && payload.jadwalSelesai.trim() !== "") {
+        cleanPayload.selesaiAt = new Date(payload.jadwalSelesai).toISOString();
+      }
+
+      console.log("[Railway] createTryout payload:", cleanPayload);
+      const data = await tryoutApi.create(cleanPayload);
+      return Array.isArray(data) ? data : data.data || data;
+    } catch (e) {
+      console.error("[Railway] createTryout gagal:", e.message);
+      throw e;
     }
-
-    const cleanPayload = {
-      judul: payload.judul,
-      kategori: payload.kategori,
-      status: payload.status || "DRAFT",
-      totalSoal: parseInt(payload.totalSoal) || 155,
-      durasiTPS,
-      durasiTKA,
-    };
-
-    if (payload.jadwalMulai && payload.jadwalMulai.trim() !== "") {
-      cleanPayload.mulaiAt = new Date(payload.jadwalMulai).toISOString();
-    }
-    if (payload.jadwalSelesai && payload.jadwalSelesai.trim() !== "") {
-      cleanPayload.selesaiAt = new Date(payload.jadwalSelesai).toISOString();
-    }
-
-    console.log("[Railway] createTryout payload:", cleanPayload);
-    const data = await tryoutApi.create(cleanPayload);
-    return Array.isArray(data) ? data : data.data || data;
-  } catch (e) {
-    console.error("[Railway] createTryout gagal:", e.message);
-    throw e;
-  }
-},
+  },
 
   updateTryoutStatus: async (id, status) => {
     try {
@@ -1120,7 +1092,7 @@ async function _localFallbackSession(mapel) {
     ? allSoal.filter(s => s.mapel === mapel)
     : allSoal;
 
- 
+
   const soalToUse = (filtered.length > 0 ? filtered : allSoal).slice(0, 20);
 
   return {
