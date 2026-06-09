@@ -582,22 +582,9 @@ Jawab dalam bahasa Indonesia kecuali jika pertanyaan dalam bahasa Inggris.`
       parts: [{ text: message }],
     });
 
-    const requestBody = {
-      system_instruction: systemInstruction,
-      contents: geminiContents,
-      generationConfig: {
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 2048,
-      },
-      safetySettings: [
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-      ],
-    };
-
     // Daftar model fallback — dicoba berurutan jika model sebelumnya gagal/overload
+    // v1beta: mendukung system_instruction field
+    // v1    : system_instruction TIDAK didukung — dimasukkan ke contents sebagai turn pertama
     const MODEL_FALLBACKS = [
       { version: "v1beta", model: "gemini-2.0-flash" },
       { version: "v1beta", model: "gemini-2.0-flash-lite" },
@@ -605,10 +592,52 @@ Jawab dalam bahasa Indonesia kecuali jika pertanyaan dalam bahasa Inggris.`
       { version: "v1",     model: "gemini-1.5-flash-8b" },
     ];
 
+    const systemPromptText = systemInstruction.parts[0].text;
+
     let lastError = null;
 
     for (const { version, model } of MODEL_FALLBACKS) {
       const endpoint = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${apiKey}`;
+
+      // Buat request body sesuai versi API
+      let requestBody;
+      if (version === "v1beta") {
+        // v1beta mendukung system_instruction
+        requestBody = {
+          system_instruction: systemInstruction,
+          contents: geminiContents,
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 2048,
+          },
+          safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+          ],
+        };
+      } else {
+        // v1 TIDAK mendukung system_instruction — sisipkan sebagai turn pertama user+model
+        const contentsWithSystem = [
+          { role: "user",  parts: [{ text: systemPromptText }] },
+          { role: "model", parts: [{ text: "Baik, saya siap membantu sebagai AI Mentor EduPTN untuk persiapan UTBK SNBT 2026." }] },
+          ...geminiContents,
+        ];
+        requestBody = {
+          contents: contentsWithSystem,
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 2048,
+          },
+          safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+          ],
+        };
+      }
 
       let response;
       try {
@@ -620,7 +649,7 @@ Jawab dalam bahasa Indonesia kecuali jika pertanyaan dalam bahasa Inggris.`
       } catch (networkErr) {
         console.error(`[Gemini] Network error saat mencoba ${model}:`, networkErr);
         lastError = new Error("Tidak dapat terhubung ke Gemini API. Periksa koneksi internet Anda.");
-        continue; // coba model berikutnya
+        continue;
       }
 
       // Sukses — ambil teks respons
@@ -631,7 +660,6 @@ Jawab dalam bahasa Indonesia kecuali jika pertanyaan dalam bahasa Inggris.`
           console.log(`[Gemini] Sukses menggunakan model: ${model}`);
           return text;
         }
-        // Respons kosong — coba model berikutnya
         lastError = new Error("Gemini tidak mengembalikan respons yang valid.");
         continue;
       }
@@ -646,14 +674,12 @@ Jawab dalam bahasa Indonesia kecuali jika pertanyaan dalam bahasa Inggris.`
       console.warn(`[Gemini] Model ${model} gagal (${response.status}):`, errMsg);
       lastError = new Error(errMsg);
 
-      // Jika bukan error overload/unavailable, hentikan (misal: API key salah)
+      // Error retryable: overload (503), rate limit (429), model tidak ditemukan (404)
+      // Error fatal: API key salah (401) — stop langsung
       const isRetryable = response.status === 503 || response.status === 429 || response.status === 404;
       if (!isRetryable) {
-        // Error fatal (401 key salah, 400 bad request) — jangan coba model lain
         throw lastError;
       }
-
-      // 503 / 429 / 404 → lanjut ke model berikutnya
     }
 
     // Semua model gagal
