@@ -6,11 +6,8 @@ import {
   ChevronDown, Play, ExternalLink, Mail, MapPin, Phone,
   Facebook, Twitter, Instagram, Linkedin, Youtube
 } from "lucide-react";
+import imageUTBK from "../../public/logo.png"
 
-/**
- * LandingPage — Halaman landing profesional untuk EduPTN.
- * Struktur lengkap: Hero, Features, Stats, Preview, Testimonials, Pricing, FAQ, CTA, Footer.
- */
 export default function LandingPage({ user, onNavigateToAuth, onNavigateToDashboard, darkMode, onToggleDarkMode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("siswa");
@@ -161,15 +158,11 @@ export default function LandingPage({ user, onNavigateToAuth, onNavigateToDashbo
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               {/* Logo */}
-              <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => scrollToSection("hero")}>
-                <div className="rounded-xl bg-teal-600 p-2 text-white">
-                  <GraduationCap className="h-5 w-5" />
-                </div>
-                <div>
-                  <span className="font-bold text-gray-900 dark:text-white text-base">EduPTN</span>
-                  <span className="block text-[8px] text-gray-400 font-bold uppercase tracking-widest font-mono">UTBK-SNBT 2026</span>
-                </div>
-              </div>
+              <img
+          src={imageUTBK}
+          alt="EduPTN"
+          className="h-20 w-auto"
+          />
 
               {/* Desktop menu */}
               <div className="hidden md:flex items-center gap-8">
