@@ -582,62 +582,38 @@ Jawab dalam bahasa Indonesia kecuali jika pertanyaan dalam bahasa Inggris.`
       parts: [{ text: message }],
     });
 
-    // Daftar model fallback — dicoba berurutan jika model sebelumnya gagal/overload
-    // v1beta: mendukung system_instruction field
-    // v1    : system_instruction TIDAK didukung — dimasukkan ke contents sebagai turn pertama
+    // Semua model menggunakan v1beta — endpoint yang mendukung system_instruction
+    // dan memiliki ketersediaan model paling lengkap
     const MODEL_FALLBACKS = [
-      { version: "v1beta", model: "gemini-2.0-flash" },
-      { version: "v1beta", model: "gemini-2.0-flash-lite" },
-      { version: "v1",     model: "gemini-1.5-flash" },
-      { version: "v1",     model: "gemini-1.5-flash-8b" },
+      "gemini-2.5-flash",        // terbaru, prioritas utama
+      "gemini-2.0-flash",        // stabil, fallback 1
+      "gemini-2.0-flash-lite",   // ringan, fallback 2
+      "gemini-1.5-flash-latest", // fallback 3
+      "gemini-1.5-flash-8b",     // paling ringan, last resort
     ];
 
-    const systemPromptText = systemInstruction.parts[0].text;
+    const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+
+    // Request body sama untuk semua model (v1beta semua)
+    const requestBody = {
+      system_instruction: systemInstruction,
+      contents: geminiContents,
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      },
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+      ],
+    };
 
     let lastError = null;
 
-    for (const { version, model } of MODEL_FALLBACKS) {
-      const endpoint = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${apiKey}`;
-
-      // Buat request body sesuai versi API
-      let requestBody;
-      if (version === "v1beta") {
-        // v1beta mendukung system_instruction
-        requestBody = {
-          system_instruction: systemInstruction,
-          contents: geminiContents,
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 2048,
-          },
-          safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-          ],
-        };
-      } else {
-        // v1 TIDAK mendukung system_instruction — sisipkan sebagai turn pertama user+model
-        const contentsWithSystem = [
-          { role: "user",  parts: [{ text: systemPromptText }] },
-          { role: "model", parts: [{ text: "Baik, saya siap membantu sebagai AI Mentor EduPTN untuk persiapan UTBK SNBT 2026." }] },
-          ...geminiContents,
-        ];
-        requestBody = {
-          contents: contentsWithSystem,
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 2048,
-          },
-          safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-          ],
-        };
-      }
+    for (const model of MODEL_FALLBACKS) {
+      const endpoint = `${BASE_URL}/${model}:generateContent?key=${apiKey}`;
 
       let response;
       try {
