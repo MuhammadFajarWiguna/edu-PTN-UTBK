@@ -1,0 +1,177 @@
+═══════════════════════════════════════════════════════════════
+  🚀 EDUPTN - DUMMY AUTH CHEAT SHEET
+═══════════════════════════════════════════════════════════════
+
+📅 Implementation Date: 2026-07-15
+✅ Status: WORKING
+🌐 Dev Server: http://localhost:5001
+
+═══════════════════════════════════════════════════════════════
+  🔑 DEMO ACCOUNTS (READY TO USE)
+═══════════════════════════════════════════════════════════════
+
+1. Demo Siswa (Student)
+   📧 demo.siswa@eduptn.com
+   🔒 demo123456
+   👤 Role: SISWA
+
+2. Demo Admin
+   📧 demo.admin@eduptn.com
+   🔒 demo123456
+   👤 Role: ADMIN
+
+3. Admin Utama
+   📧 admin@eduptn.com
+   🔒 admin123
+   👤 Role: ADMIN
+
+4. Siswa Regular
+   📧 siswa@eduptn.com
+   🔒 siswa123
+   👤 Role: SISWA
+
+═══════════════════════════════════════════════════════════════
+  ⚡ QUICK COMMANDS
+═══════════════════════════════════════════════════════════════
+
+Start Dev Server (RECOMMENDED):
+  ./start-server.sh
+
+Alternative Start (if error):
+  lsof -ti:5001 -ti:24678 | xargs kill -9 2>/dev/null
+  npm run dev
+
+Build for Production:
+  npm run build
+
+Open Browser:
+  http://localhost:5001
+
+Fix Port Error:
+  pkill -f "node server.js"
+  ./start-server.sh
+
+═══════════════════════════════════════════════════════════════
+  🐛 DEBUG COMMANDS (Browser Console - F12)
+═══════════════════════════════════════════════════════════════
+
+Check Session:
+  console.log(localStorage.getItem("utbk_token"));
+  console.log(localStorage.getItem("utbk_user"));
+
+Check All Users:
+  console.log(JSON.parse(localStorage.getItem("utbk_registered_users")));
+
+Check Passwords:
+  console.log(JSON.parse(localStorage.getItem("utbk_dummy_passwords")));
+
+Force Logout:
+  localStorage.removeItem("utbk_token");
+  localStorage.removeItem("utbk_user");
+  location.reload();
+
+Clear All Data:
+  localStorage.clear();
+  location.reload();
+
+═══════════════════════════════════════════════════════════════
+  📂 localStorage KEYS
+═══════════════════════════════════════════════════════════════
+
+utbk_token              → Session token
+utbk_user               → Current user data
+utbk_dummy_passwords    → Password store
+utbk_registered_users   → All users list
+
+═══════════════════════════════════════════════════════════════
+  🔧 TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════
+
+Problem: Login gagal
+Fix: Try demo.siswa@eduptn.com / demo123456
+
+Problem: Register gagal  
+Fix: Use different email, password >= 6 chars
+
+Problem: Session hilang
+Fix: Allow localStorage in browser settings
+
+Problem: Lupa password
+Fix: localStorage.clear(); then register again
+
+═══════════════════════════════════════════════════════════════
+  ✅ TESTING CHECKLIST
+═══════════════════════════════════════════════════════════════
+
+[ ] Login demo.siswa@eduptn.com
+[ ] Explore student dashboard
+[ ] Logout
+[ ] Login demo.admin@eduptn.com  
+[ ] Explore admin dashboard
+[ ] Logout
+[ ] Register new account
+[ ] Login with new account
+[ ] Test wrong password error
+[ ] Test duplicate email error
+[ ] Test session persistence (F5)
+[ ] Test dark mode
+[ ] Test responsive (resize window)
+
+═══════════════════════════════════════════════════════════════
+  📚 DOCUMENTATION FILES
+═══════════════════════════════════════════════════════════════
+
+PANDUAN_LENGKAP_ID.md          → Bahasa Indonesia (lengkap)
+DUMMY_AUTH_IMPLEMENTATION.md   → English (technical)
+QUICK_LOGIN_GUIDE.md           → English (quick start)
+IMPLEMENTATION_SUMMARY.txt     → Overview
+CHEAT_SHEET.txt                → This file
+
+═══════════════════════════════════════════════════════════════
+  ⚠️ IMPORTANT NOTES
+═══════════════════════════════════════════════════════════════
+
+⚠️ DEVELOPMENT ONLY - Not for production
+⚠️ Passwords in plaintext - No encryption
+⚠️ Data per-browser - No sync across devices
+⚠️ Clear browser data = lose all accounts
+
+For production: Use real backend!
+
+═══════════════════════════════════════════════════════════════
+  🎯 WHAT WORKS
+═══════════════════════════════════════════════════════════════
+
+✅ Login (dummy)
+✅ Register (dummy)
+✅ Logout
+✅ Session management
+✅ All dashboard views
+✅ Dark mode
+✅ Responsive design
+✅ localStorage data persistence
+
+═══════════════════════════════════════════════════════════════
+  ❌ WHAT DOESN'T WORK (Needs Real Backend)
+═══════════════════════════════════════════════════════════════
+
+❌ Multi-device sync
+❌ Password recovery
+❌ Real-time server features
+❌ Global leaderboard
+❌ Server-side scoring
+
+═══════════════════════════════════════════════════════════════
+  🎉 SUCCESS!
+═══════════════════════════════════════════════════════════════
+
+✅ Build: 6.77s
+✅ No backend required
+✅ 4 demo accounts ready
+✅ Registration works
+✅ Login works
+✅ Documentation complete
+
+Happy Testing! 🚀
+
+═══════════════════════════════════════════════════════════════

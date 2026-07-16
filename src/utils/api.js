@@ -65,69 +65,160 @@ export const apiService = {
 
   // ── AUTH ───────────────────────────────────────────────────────────────────
 
-  // api.js — register
+  // api.js — register (DUMMY - No API dependency)
   register: async (email, name, password = "123456") => {
     try {
-      const data = await authApi.register(email, name, password);
-      const token = data.token || data.access_token || data.accessToken;
-      const rawUser = data.data || data.user;
-      const user = normalizeUser(rawUser, name);
-
-      if (user) {
-        // Token mungkin tidak ada jika butuh verifikasi email dulu
-        if (token) {
-          saveSession(user, token);
-          _syncUserToLocalList(user);
-        }
-        return { user, token: token || null, message: data.message };
+      console.log("[DUMMY AUTH] Registering user:", { email, name });
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Check if user already exists
+      const existingUsers = apiService.getRegisteredUsers();
+      const userExists = existingUsers.some(u => u.email.toLowerCase() === email.toLowerCase());
+      
+      if (userExists) {
+        throw new Error("Email sudah terdaftar. Silakan login.");
       }
-      throw new Error("Format response register tidak sesuai");
+      
+      // Create new user with dummy data
+      const newUser = {
+        id: "usr-" + Math.random().toString(36).substring(2, 11),
+        email: email.trim(),
+        name: name.trim(),
+        role: email.toLowerCase().includes("admin") ? "ADMIN" : "SISWA",
+        createdAt: new Date().toISOString(),
+        pilihanKampus: "Belum Memilih"
+      };
+      
+      // Save to localStorage users list
+      existingUsers.unshift(newUser);
+      apiService.saveRegisteredUsers(existingUsers);
+      
+      // Save password to dummy password store
+      const passwordStore = JSON.parse(localStorage.getItem("utbk_dummy_passwords") || "{}");
+      passwordStore[email.toLowerCase()] = password;
+      localStorage.setItem("utbk_dummy_passwords", JSON.stringify(passwordStore));
+      
+      console.log("[DUMMY AUTH] Registration successful:", newUser.name);
+      
+      // Return success without auto-login
+      return { 
+        user: newUser, 
+        token: null, 
+        message: "Registrasi berhasil! Silakan login." 
+      };
     } catch (e) {
-      console.error("[Railway] register gagal:", e.message);
+      console.error("[DUMMY AUTH] Registration failed:", e.message);
       throw e;
     }
   },
 
-  // api.js — login: simpan token dulu, lalu fetch /auth/me untuk dapat role lengkap
+  // api.js — login (DUMMY - No API dependency)
   login: async (email, password = "123456") => {
     try {
-      const data = await authApi.login(email, password);
-      console.log("LOGIN RESPONSE:", data);
-
-      const token = data.token || data.access_token || data.accessToken;
-      // Ambil user dari response login (mungkin belum ada role-nya)
-      const rawUser = data.data || data.user;
-      const userFromLogin = normalizeUser(rawUser);
-
-      if (!token || !userFromLogin) {
-        throw new Error("Format response login tidak sesuai");
-      }
-
-      // Simpan token & user sementara agar /auth/me bisa pakai Authorization header
-      saveSession(userFromLogin, token);
-
-      // Langsung panggil /auth/me untuk mendapatkan user LENGKAP termasuk role
-      // (/auth/login API tidak selalu mengembalikan role di response-nya)
-      try {
-        const meData = await authApi.me();
-        const rawMeUser = meData.data || meData.user || meData;
-        const fullUser = normalizeUser(rawMeUser);
-        if (fullUser && fullUser.id) {
-          // Simpan user lengkap dengan role yang benar
-          saveSession(fullUser, token);
-          _syncUserToLocalList(fullUser);
-          console.log("[Railway] Login berhasil, user role:", fullUser.role);
-          return { user: fullUser, token };
+      console.log("[DUMMY AUTH] Login attempt:", email);
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 600));
+      
+      // Hardcoded demo & admin accounts (always available)
+      const BUILTIN_USERS = {
+        "demo.siswa@eduptn.com": {
+          password: "demo123456",
+          user: {
+            id: "demo-siswa-001",
+            email: "demo.siswa@eduptn.com",
+            name: "Demo Siswa",
+            role: "SISWA",
+            createdAt: new Date().toISOString()
+          }
+        },
+        "demo.admin@eduptn.com": {
+          password: "demo123456",
+          user: {
+            id: "demo-admin-001",
+            email: "demo.admin@eduptn.com",
+            name: "Demo Admin",
+            role: "ADMIN",
+            createdAt: new Date().toISOString()
+          }
+        },
+        "admin@eduptn.com": {
+          password: "admin123",
+          user: {
+            id: "admin-001",
+            email: "admin@eduptn.com",
+            name: "Administrator",
+            role: "ADMIN",
+            createdAt: new Date().toISOString()
+          }
+        },
+        "siswa@eduptn.com": {
+          password: "siswa123",
+          user: {
+            id: "siswa-001",
+            email: "siswa@eduptn.com",
+            name: "Ahmad Rivaldi",
+            role: "SISWA",
+            createdAt: new Date().toISOString()
+          }
         }
-      } catch (meErr) {
-        // /auth/me gagal — pakai data dari login response saja
-        console.warn("[Railway] /auth/me setelah login gagal, pakai data login:", meErr.message);
+      };
+      
+      const emailLower = email.toLowerCase().trim();
+      
+      // Check built-in users first
+      if (BUILTIN_USERS[emailLower]) {
+        const account = BUILTIN_USERS[emailLower];
+        if (account.password === password) {
+          const token = "mock-jwt-" + Math.random().toString(36).substring(2);
+          const user = account.user;
+          
+          saveSession(user, token);
+          _syncUserToLocalList(user);
+          
+          console.log("[DUMMY AUTH] Login successful (built-in):", user.name);
+          return { user, token };
+        } else {
+          throw new Error("Email atau password salah. Periksa kembali.");
+        }
       }
-
-      _syncUserToLocalList(userFromLogin);
-      return { user: userFromLogin, token };
+      
+      // Check registered users from localStorage
+      const registeredUsers = apiService.getRegisteredUsers();
+      const foundUser = registeredUsers.find(u => u.email.toLowerCase() === emailLower);
+      
+      if (!foundUser) {
+        throw new Error("Email belum terdaftar. Silakan daftar terlebih dahulu.");
+      }
+      
+      // Check password from dummy password store
+      const passwordStore = JSON.parse(localStorage.getItem("utbk_dummy_passwords") || "{}");
+      const storedPassword = passwordStore[emailLower];
+      
+      if (!storedPassword || storedPassword !== password) {
+        throw new Error("Email atau password salah. Periksa kembali.");
+      }
+      
+      // Login successful
+      const token = "mock-jwt-" + Math.random().toString(36).substring(2);
+      const user = {
+        id: foundUser.id,
+        email: foundUser.email,
+        name: foundUser.name,
+        role: foundUser.role || "SISWA",
+        createdAt: foundUser.createdAt
+      };
+      
+      saveSession(user, token);
+      _syncUserToLocalList(user);
+      
+      console.log("[DUMMY AUTH] Login successful:", user.name);
+      return { user, token };
+      
     } catch (e) {
-      console.error("[Railway] login gagal:", e.message);
+      console.error("[DUMMY AUTH] Login failed:", e.message);
       throw e;
     }
   },

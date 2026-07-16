@@ -78,6 +78,7 @@ export default function ConsultationView({ showToast }) {
     }
     setShowKeyConfig(false);
   };
+  
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

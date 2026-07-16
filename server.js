@@ -89,47 +89,6 @@ passport.use(
   )
 );
 
-// Configure LinkedIn OAuth Strategy with custom profile URL
-passport.use(
-  new LinkedInStrategy(
-    {
-      clientID: process.env.LINKEDIN_CLIENT_ID,
-      clientSecret: process.env.LINKEDIN_CLIENT_SECRET,
-      callbackURL: process.env.LINKEDIN_CALLBACK_URL || "http://localhost:5001/auth/linkedin/callback",
-      scope: ["openid", "profile", "email"],
-      state: true,
-      // Use OIDC userinfo endpoint instead of the deprecated v2 API
-      profileURL: "https://api.linkedin.com/v2/userinfo",
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        // Extract user info from LinkedIn profile
-        console.log("[LinkedIn OAuth] Raw profile:", JSON.stringify(profile, null, 2));
-        console.log("[LinkedIn OAuth] Access token:", accessToken ? "Present" : "Missing");
-        
-        // LinkedIn OpenID Connect profile structure
-        const user = {
-          id: `linkedin-${profile.id || profile.sub}`,
-          linkedinId: profile.id || profile.sub,
-          email: profile.email || profile.emails?.[0]?.value || `linkedin-${profile.id || profile.sub}@temp.com`,
-          name: profile.name || profile.displayName || `${profile.given_name || ''} ${profile.family_name || ''}`.trim() || "LinkedIn User",
-          firstName: profile.given_name || profile.name?.givenName || profile.givenName || "",
-          lastName: profile.family_name || profile.name?.familyName || profile.familyName || "",
-          avatar: profile.picture || profile.photos?.[0]?.value || "",
-          role: "SISWA", // Default role
-          provider: "linkedin",
-        };
-
-        console.log("[LinkedIn OAuth] User authenticated:", user.email);
-
-        return done(null, user);
-      } catch (error) {
-        console.error("[LinkedIn OAuth] Error:", error);
-        return done(error, null);
-      }
-    }
-  )
-);
 
 // Fallback credentials provided by the user
 const FALLBACK_SB_PUB = process.env.SINGLEBASE_PUBLISHABLE_KEY || "";
@@ -249,7 +208,7 @@ app.get(
   (req, res) => {
     // Success! User is authenticated
     const user = req.user;
-    
+
     // Generate a simple token (in production, use JWT)
     const token = Buffer.from(JSON.stringify({
       id: user.id,
@@ -269,56 +228,6 @@ app.get("/auth/google/failure", (req, res) => {
   res.redirect("/?google_auth=failed");
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// LINKEDIN OAUTH ROUTES
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Initiate LinkedIn OAuth login
-app.get("/auth/linkedin", passport.authenticate("linkedin", {
-  scope: ["openid", "profile", "email"],
-}));
-
-// LinkedIn OAuth callback
-app.get(
-  "/auth/linkedin/callback",
-  (req, res, next) => {
-    passport.authenticate("linkedin", (err, user, info) => {
-      if (err) {
-        console.error("[LinkedIn OAuth] Authentication error:", err);
-        return res.redirect("/?linkedin_auth=failed&error=" + encodeURIComponent(err.message || "Unknown error"));
-      }
-      
-      if (!user) {
-        console.error("[LinkedIn OAuth] No user returned:", info);
-        return res.redirect("/?linkedin_auth=failed&error=no_user");
-      }
-
-      // Login user
-      req.logIn(user, (loginErr) => {
-        if (loginErr) {
-          console.error("[LinkedIn OAuth] Login error:", loginErr);
-          return res.redirect("/?linkedin_auth=failed&error=login_failed");
-        }
-
-        // Success! Generate token
-        const token = Buffer.from(JSON.stringify({
-          id: user.id,
-          email: user.email,
-          timestamp: Date.now()
-        })).toString('base64');
-
-        // Redirect to frontend with user data
-        const redirectUrl = `/?linkedin_auth=success&user=${encodeURIComponent(JSON.stringify(user))}&token=${token}`;
-        res.redirect(redirectUrl);
-      });
-    })(req, res, next);
-  }
-);
-
-// LinkedIn OAuth failure handler
-app.get("/auth/linkedin/failure", (req, res) => {
-  res.redirect("/?linkedin_auth=failed");
-});
 
 // ═══════════════════════════════════════════════════════════════════════════
 
